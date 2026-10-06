@@ -1,0 +1,75 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AccountKind {
+  BANK
+  CARD
+}
+
+enum HoldingKind {
+  STOCK
+  MF
+  GOLD
+  FD
+}
+
+model Account {
+  id           Int           @id @default(autoincrement())
+  code         String        @unique
+  name         String
+  kind         AccountKind
+  createdAt    DateTime      @default(now())
+  transactions Transaction[]
+}
+
+model Category {
+  id           Int           @id @default(autoincrement())
+  name         String        @unique
+  isSpending   Boolean       @default(true)
+  rules        Rule[]
+  transactions Transaction[]
+}
+
+model Rule {
+  id         Int      @id @default(autoincrement())
+  keyword    String   @unique
+  categoryId Int
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+}
+
+model Transaction {
+  id          Int       @id @default(autoincrement())
+  accountId   Int
+  account     Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  date        DateTime  @db.Date
+  description String
+  amount      Decimal   @db.Decimal(14, 2)
+  ref         String?
+  categoryId  Int?
+  category    Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  hash        String    @unique
+  importedAt  DateTime  @default(now())
+
+  @@index([date])
+  @@index([accountId, date])
+}
+
+model Holding {
+  id           Int         @id @default(autoincrement())
+  kind         HoldingKind
+  symbol       String
+  qty          Decimal     @db.Decimal(14, 4)
+  avgPrice     Decimal     @db.Decimal(14, 2)
+  currentPrice Decimal?    @db.Decimal(14, 2)
+  note         String?
+  updatedAt    DateTime    @updatedAt
+
+  @@unique([kind, symbol])
+}
