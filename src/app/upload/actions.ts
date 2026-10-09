@@ -57,6 +57,7 @@ async function withCategories(ok: Row[], bad: Bad[]): Promise<Preview> {
   const fallback = {
     incomeId: cats.find((c) => c.name === "Income")?.id ?? -1,
     transferId: cats.find((c) => c.name === "Transfer")?.id ?? -1,
+    reimbursementId: cats.find((c) => c.name === "Reimbursement")?.id,
   };
 
   const existing = new Set(

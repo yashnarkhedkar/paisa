@@ -55,10 +55,20 @@ describe("categorise", () => {
   it("returns null otherwise", () => {
     expect(categorise("RANDOM", -10, [], fb)).toBeNull();
   });
+  it("reimbursement rules only claim money coming in", () => {
+    const rules = [{ keyword: "friend@", categoryId: 16 }];
+    const withR = { ...fb, reimbursementId: 16 };
+    expect(categorise("UPI/friend@ybl", 500, rules, withR)).toBe(16);
+    expect(categorise("UPI/friend@ybl", -500, rules, withR)).toBeNull(); // paying the friend is still spending
+  });
 });
 
 describe("merchantKeyword", () => {
   it("strips bank noise", () => expect(merchantKeyword("UPI-DR-12345-SWIGGY BANGALORE")).toBe("swiggy bangalore"));
   it("rejects too-short keywords", () => expect(merchantKeyword("OLA")).toBe(""));
   it("keeps plain merchants", () => expect(merchantKeyword("NETFLIX")).toBe("netflix"));
+  it("uses the UPI id so phone-number payees stay distinct", () => {
+    expect(merchantKeyword("UPI/538053038257/16:20:20/UPI/9850828135@ybl/Paym")).toBe("9850828135@");
+    expect(merchantKeyword("UPI/1/UPI/cred.club@axisb/pay")).toBe("cred.club@");
+  });
 });

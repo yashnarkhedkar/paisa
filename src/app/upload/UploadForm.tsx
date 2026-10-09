@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { inr } from "@/lib/format";
 import { importRows, previewCsv, type Preview } from "./actions";
@@ -8,11 +9,14 @@ export function UploadForm({ accounts }: { accounts: { code: string; name: strin
   const [preview, setPreview] = useState<Preview | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
+  const [showAll, setShowAll] = useState(false);
+  const [month, setMonth] = useState("");
   const [pending, start] = useTransition();
 
   const onPreview = (fd: FormData) =>
     start(async () => {
       setSummary(null);
+      setShowAll(false);
       setPreview(await previewCsv(fd));
     });
 
@@ -22,12 +26,23 @@ export function UploadForm({ accounts }: { accounts: { code: string; name: strin
       const fresh = preview.rows.filter((r) => !r.dup);
       const res = await importRows(JSON.stringify(fresh));
       const dups = res.duplicates + (preview.rows.length - fresh.length);
+      // land on the month most of the rows are in, not today's month
+      const count = new Map<string, number>();
+      for (const r of fresh) count.set(r.date.slice(0, 7), (count.get(r.date.slice(0, 7)) ?? 0) + 1);
+      setMonth([...count].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "");
       setSummary(`${res.imported} imported, ${dups} duplicates skipped, ${preview.bad.length} rejected`);
       setPreview(null);
       setFileName("");
     });
 
   const freshCount = preview ? preview.rows.filter((r) => !r.dup).length : 0;
+  const LIMIT = 20;
+  const shown = preview ? (showAll ? preview.rows : preview.rows.slice(0, LIMIT)) : [];
+  const importButton = (
+    <button onClick={onImport} disabled={pending || freshCount === 0} className="btn-primary w-full sm:w-auto">
+      {pending ? "Importing…" : freshCount === 0 ? "Nothing new to import" : `Import ${freshCount} rows`}
+    </button>
+  );
 
   return (
     <div className="space-y-4">
@@ -87,9 +102,9 @@ export function UploadForm({ accounts }: { accounts: { code: string; name: strin
       {summary && (
         <div className="card flex flex-wrap items-center justify-between gap-3 border-green-200 bg-green-50">
           <p className="text-sm font-medium text-green-800">{summary}</p>
-          <a href="/" className="btn btn-sm">
+          <Link href={month ? `/?month=${month}` : "/"} className="btn btn-sm">
             See dashboard
-          </a>
+          </Link>
         </div>
       )}
       {preview?.error && <p className="card border-red-200 bg-red-50 text-sm text-neg">{preview.error}</p>}
@@ -100,9 +115,10 @@ export function UploadForm({ accounts }: { accounts: { code: string; name: strin
             {preview.rows.length} rows read · {freshCount} new · {preview.rows.length - freshCount} already imported
             {preview.bad.length > 0 && <> · <span className="text-neg">{preview.bad.length} rejected</span></>}
           </p>
+          {importButton}
 
           <div className="card-tight divide-rows text-sm">
-            {preview.rows.map((r) => (
+            {shown.map((r) => (
               <div key={r.line} className={`px-4 py-3 ${r.dup ? "opacity-50" : ""}`}>
                 <div className="flex items-baseline justify-between gap-3">
                   <span className="min-w-0 truncate font-medium">{r.description}</span>
@@ -114,6 +130,11 @@ export function UploadForm({ accounts }: { accounts: { code: string; name: strin
                 </div>
               </div>
             ))}
+            {preview.rows.length > LIMIT && (
+              <button type="button" onClick={() => setShowAll(!showAll)} className="hint w-full px-4 py-3 text-center underline">
+                {showAll ? `Show first ${LIMIT} only` : `Show all ${preview.rows.length} rows`}
+              </button>
+            )}
           </div>
 
           {preview.bad.length > 0 && (
@@ -126,9 +147,7 @@ export function UploadForm({ accounts }: { accounts: { code: string; name: strin
             </ul>
           )}
 
-          <button onClick={onImport} disabled={pending || freshCount === 0} className="btn-primary w-full sm:w-auto">
-            {pending ? "Importing…" : freshCount === 0 ? "Nothing new to import" : `Import ${freshCount} rows`}
-          </button>
+          {showAll && importButton}
         </>
       )}
     </div>

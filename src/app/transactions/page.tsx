@@ -1,8 +1,19 @@
 import { db } from "@/lib/db";
 import { inr, monthKey } from "@/lib/format";
-import Row from "./Row";
+import { merchantKeyword } from "@/lib/categorise";
+import CategoryPicker from "./CategoryPicker";
+import Row, { rupees } from "./Row";
 
-type SP = { month?: string; account?: string; category?: string; q?: string };
+type SP = { month?: string; account?: string; category?: string; q?: string; sort?: string; group?: string };
+
+const SORTS = {
+  new: { label: "Newest first", orderBy: [{ date: "desc" }, { id: "desc" }] },
+  old: { label: "Oldest first", orderBy: [{ date: "asc" }, { id: "asc" }] },
+  spend: { label: "Biggest spend", orderBy: [{ amount: "asc" }] },
+  credit: { label: "Biggest credit", orderBy: [{ amount: "desc" }] },
+  name: { label: "A–Z", orderBy: [{ description: "asc" }] },
+} as const;
+type Sort = keyof typeof SORTS;
 
 function monthRange(m: string) {
   const [y, mo] = m.split("-").map(Number);
@@ -16,6 +27,8 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
   const account = sp.account ?? "";
   const category = sp.category ?? "";
   const q = sp.q ?? "";
+  const sort: Sort = sp.sort && sp.sort in SORTS ? (sp.sort as Sort) : "new";
+  const grouped = sp.group === "1";
 
   const where = {
     date: { gte: start, lt: end },
@@ -28,7 +41,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
     db.transaction.findMany({
       where,
       include: { account: true },
-      orderBy: [{ date: "desc" }, { id: "desc" }],
+      orderBy: [...SORTS[sort].orderBy],
       take: 500,
     }),
     db.account.findMany({ orderBy: { code: "asc" } }),
@@ -38,6 +51,31 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
   const out = txns.filter((t) => Number(t.amount) < 0).reduce((s, t) => s - Number(t.amount), 0);
   const inn = txns.filter((t) => Number(t.amount) > 0).reduce((s, t) => s + Number(t.amount), 0);
   const uncat = txns.filter((t) => t.categoryId === null).length;
+  // "similar" = same merchantKeyword (UPI id, or cleaned merchant name). Rows already arrive in the chosen sort,
+  // so groups keep the order of their first row; for amount sorts, order groups by their total instead.
+  const groups = new Map<string, typeof txns>();
+  for (const t of txns) {
+    const k = merchantKeyword(t.description) || t.description.trim().toLowerCase();
+    groups.set(k, [...(groups.get(k) ?? []), t]);
+  }
+  const total = (g: typeof txns) => g.reduce((s, t) => s + Number(t.amount), 0);
+  const groupList = [...groups].sort(([, a], [, b]) =>
+    sort === "spend" ? total(a) - total(b) : sort === "credit" ? total(b) - total(a) : 0,
+  );
+
+  const row = (t: (typeof txns)[number]) => (
+    <Row
+      key={t.id}
+      id={t.id}
+      date={t.date.toISOString().slice(0, 10)}
+      description={t.description}
+      accountCode={t.account.code}
+      amount={Number(t.amount)}
+      categoryId={t.categoryId}
+      categories={categories}
+    />
+  );
+
   const monthName = start.toLocaleDateString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" });
 
   return (
@@ -47,7 +85,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
         <p className="muted mt-1">{monthName}</p>
       </div>
 
-      <form method="get" className="card grid grid-cols-2 gap-2 sm:flex sm:items-center">
+      <form method="get" className="card grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
         <input type="month" name="month" defaultValue={month} className="input sm:w-40" />
         <select name="account" defaultValue={account} className="select sm:w-36">
           <option value="">All accounts</option>
@@ -66,7 +104,18 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
             </option>
           ))}
         </select>
-        <input type="search" name="q" defaultValue={q} placeholder="Search merchant" className="input sm:flex-1" />
+        <input type="search" name="q" defaultValue={q} placeholder="Search merchant" className="input sm:min-w-48 sm:flex-1" />
+        <select name="sort" defaultValue={sort} className="select sm:w-40" aria-label="Sort">
+          {Object.entries(SORTS).map(([k, v]) => (
+            <option key={k} value={k}>
+              {v.label}
+            </option>
+          ))}
+        </select>
+        <label className="flex items-center gap-1.5 text-sm">
+          <input type="checkbox" name="group" value="1" defaultChecked={grouped} />
+          Group similar
+        </label>
         <button className="btn-primary col-span-2 sm:col-span-1 sm:w-auto">Apply</button>
       </form>
 
@@ -89,18 +138,36 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
         </p>
       ) : (
         <div className="card-tight divide-rows overflow-hidden">
-          {txns.map((t) => (
-            <Row
-              key={t.id}
-              id={t.id}
-              date={t.date.toISOString().slice(0, 10)}
-              description={t.description}
-              accountCode={t.account.code}
-              amount={Number(t.amount)}
-              categoryId={t.categoryId}
-              categories={categories}
-            />
-          ))}
+          {!grouped
+            ? txns.map(row)
+            : groupList.map(([key, g]) =>
+                g.length === 1 ? (
+                  row(g[0])
+                ) : (
+                  <div key={key} className="px-4 py-3 text-sm">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="min-w-0 flex-1 truncate font-medium">
+                        {key} <span className="pill ml-1">{g.length}×</span>
+                      </span>
+                      <span className={`shrink-0 font-medium ${total(g) < 0 ? "amount-neg" : "amount-pos"}`}>{rupees(total(g))}</span>
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted">
+                      <details className="min-w-0 flex-1">
+                        <summary className="cursor-pointer select-none">show {g.length}</summary>
+                        <div className="divide-rows -mx-4 mt-2 border-t border-line">{g.map(row)}</div>
+                      </details>
+                      <CategoryPicker
+                        ids={g.map((t) => t.id)}
+                        // one category for the group only if every row already shares it
+                        categoryId={g.every((t) => t.categoryId === g[0].categoryId) ? g[0].categoryId : null}
+                        keyword={merchantKeyword(g[0].description)}
+                        categories={categories}
+                        placeholder="Set all"
+                      />
+                    </div>
+                  </div>
+                ),
+              )}
         </div>
       )}
 
