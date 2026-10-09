@@ -5,7 +5,7 @@ const categories: [string, boolean][] = [
   ["Food", true], ["Groceries", true], ["Transport", true], ["Shopping", true],
   ["Bills", true], ["Rent", true], ["Health", true], ["Entertainment", true],
   ["Subscriptions", true], ["Family", true], ["Fees", true], ["Other", true],
-  ["Investment", false], ["Income", false], ["Transfer", false],
+  ["Investment", false], ["Income", false], ["Transfer", false], ["Reimbursement", false],
 ];
 const accounts: [string, string, "BANK" | "CARD"][] = [
   ["HDFC-SAV", "HDFC Savings", "BANK"],
@@ -13,13 +13,19 @@ const accounts: [string, string, "BANK" | "CARD"][] = [
   ["CC-1", "Credit Card 1", "CARD"],
   ["CC-2", "Credit Card 2", "CARD"],
   ["CC-3", "Credit Card 3", "CARD"],
+  // real accounts, codes produced by scripts/statements/convert.py
+  ["BOB-SAV", "Bank of Baroda Savings", "BANK"],
+  ["IDFC-SAV", "IDFC FIRST Savings", "BANK"],
+  ["AXIS-FK", "Axis Flipkart Card", "CARD"],
+  ["AXIS-NEO", "Axis Neo Card", "CARD"],
+  ["ICICI-CC", "ICICI Credit Card", "CARD"],
 ];
 
 // keyword (lowercase substring of description) -> category. Starter rules; edit on /rules.
 const rules: [string, string][] = [
   ["zerodha", "Investment"], ["gold scheme", "Investment"], ["fixed deposit", "Investment"],
-  ["card payment", "Transfer"], ["cc payment", "Transfer"], ["credit card", "Transfer"],
-  ["hdfc life", "Bills"], ["salary", "Income"],
+  ["card payment", "Transfer"], ["cred.club", "Transfer"], ["payment received", "Transfer"], ["kalyan", "Investment"], ["cc payment", "Transfer"], ["credit card", "Transfer"],
+  ["hdfc life", "Bills"], ["hdfclifeins", "Bills"], ["salary", "Income"],
   ["swiggy", "Food"], ["zomato", "Food"], ["bigbasket", "Groceries"], ["blinkit", "Groceries"],
   ["uber", "Transport"], ["ola cabs", "Transport"], ["olacabs", "Transport"], ["rapido", "Transport"],
   ["netflix", "Subscriptions"], ["spotify", "Subscriptions"], ["amazon", "Shopping"],

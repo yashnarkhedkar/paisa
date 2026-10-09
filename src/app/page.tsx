@@ -33,7 +33,11 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
   const txns = raw.map((t) => ({ ...t, amount: Number(t.amount) }));
 
   const spendTx = txns.filter((t) => t.amount < 0 && (t.category?.isSpending ?? true));
-  const spent = spendTx.reduce((s, t) => s - t.amount, 0);
+  // friends paying back their share cut your spending; they are not income
+  const reimbursed = txns
+    .filter((t) => t.amount > 0 && t.category?.name === "Reimbursement")
+    .reduce((s, t) => s + t.amount, 0);
+  const spent = spendTx.reduce((s, t) => s - t.amount, 0) - reimbursed;
   const income = txns
     .filter((t) => t.amount > 0 && t.category?.name === "Income")
     .reduce((s, t) => s + t.amount, 0);

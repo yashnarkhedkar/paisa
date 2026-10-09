@@ -4,13 +4,13 @@ import { UploadForm } from "./UploadForm";
 export const dynamic = "force-dynamic";
 
 const STEPS = [
-  "Convert the bank or card statement to the CSV format (see README).",
-  "Pick the file. Preview shows what will be imported and the category each row got.",
+  "Pick the account, then its PDF statement (account needs a statement format, set on Accounts). Or a CSV in the README format.",
+  "Preview shows what will be imported and the category each row got. A PDF that doesn't add up to its own totals is refused.",
   "Import. Re-uploading the same file is safe, duplicates are skipped.",
 ];
 
 export default async function UploadPage() {
-  const accounts = await db.account.findMany({ select: { code: true, name: true }, orderBy: { code: "asc" } });
+  const accounts = await db.account.findMany({ select: { code: true, name: true, format: true }, orderBy: { code: "asc" } });
   return (
     <div className="space-y-4">
       <h1 className="h1">Upload statement</h1>

@@ -2,6 +2,17 @@
 
 Single-user. Upload bank/credit-card statements as CSV, auto-categorise with rules you teach, see a monthly dashboard, track holdings. Next.js 16 + Prisma + Postgres.
 
+## PDF statements (BoB, IDFC, Axis cards, ICICI card)
+
+Two ways, same readers:
+
+- **In the app:** Accounts → set the account's *statement format* (e.g. `BOB PDF`). Upload → pick the account → pick the PDF.
+- **Offline script:** `python scripts/statements/convert.py "C:/path/to/folder"` → writes `upload.csv` in that folder for every PDF it recognises. Needs `pip install pdfplumber`.
+
+Locked PDFs: put the passwords in `.env` as `STATEMENT_PASSWORDS=pw1,pw2` (tried in order). Never commit them. On Vercel set the same env var.
+
+Every reader checks its rows against the statement's own totals (opening + transactions = closing, or card summary). If it doesn't add up, nothing is imported and you see why. A new bank or a changed layout = new reader in `src/lib/statements/` (app) and `scripts/statements/` (script).
+
 ## CSV format (convert every statement to this)
 
 ```
@@ -43,7 +54,7 @@ Password hash (base64 so `$` chars survive env loaders): `node -e "console.log(B
 
 1. Neon.tech → new project → copy connection string.
 2. Locally: `DATABASE_URL=<neon> npx prisma migrate deploy && DATABASE_URL=<neon> npx prisma db seed`
-3. Push to GitHub. Vercel → import repo → set the 3 env vars → deploy.
+3. Push to GitHub. Vercel → import repo → set the 4 env vars (incl. `STATEMENT_PASSWORDS`) → deploy.
 4. Open on phone → "Add to Home Screen".
 
 ## Tests

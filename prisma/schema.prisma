@@ -12,6 +12,14 @@ enum AccountKind {
   CARD
 }
 
+// which PDF reader understands this account's statements; null = CSV only
+enum StatementFormat {
+  BOB
+  IDFC
+  AXIS
+  ICICI
+}
+
 enum HoldingKind {
   STOCK
   MF
@@ -24,6 +32,7 @@ model Account {
   code         String        @unique
   name         String
   kind         AccountKind
+  format       StatementFormat?
   createdAt    DateTime      @default(now())
   transactions Transaction[]
 }

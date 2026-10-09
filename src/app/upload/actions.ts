@@ -4,6 +4,9 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { parseStatementCsv, type Bad, type Row } from "@/lib/csv";
 import { categorise } from "@/lib/categorise";
+import { txnHash } from "@/lib/hash";
+import { READERS } from "@/lib/statements";
+import { LockedPdfError, readPdf } from "@/lib/statements/pdf";
 
 export type PreviewRow = Row & { categoryId: number | null; categoryName: string; dup: boolean };
 export type Preview = { rows: PreviewRow[]; bad: Bad[]; error?: string };
@@ -12,13 +15,41 @@ export async function previewCsv(formData: FormData): Promise<Preview> {
   const file = formData.get("file");
   const selected = String(formData.get("account") ?? "");
   if (!(file instanceof File) || !file.size) return { rows: [], bad: [], error: "No file" };
+  if (file.name.toLowerCase().endsWith(".pdf")) return previewPdf(file, selected);
 
   let text = await file.text();
   // fill blank account column with selected account
   if (selected) text = text.replace(/^(\d{4}-\d{2}-\d{2}),(?=,)/gm, `$1,${selected}`);
 
-  const [accounts, rules, cats] = await Promise.all([
-    db.account.findMany({ select: { code: true } }),
+  const accounts = await db.account.findMany({ select: { code: true } });
+  const { ok, bad } = parseStatementCsv(text, accounts.map((a) => a.code));
+  return withCategories(ok, bad);
+}
+
+async function previewPdf(file: File, code: string): Promise<Preview> {
+  const account = code ? await db.account.findUnique({ where: { code } }) : null;
+  if (!account) return { rows: [], bad: [], error: "Pick the account this PDF belongs to" };
+  if (!account.format) return { rows: [], bad: [], error: `${code} has no statement format. Set one on the Accounts page.` };
+  const reader = READERS[account.format];
+  try {
+    const pages = await readPdf(new Uint8Array(await file.arrayBuffer()));
+    if (!reader.detect(pages[0]?.text ?? "")) return { rows: [], bad: [], error: `This PDF doesn't match the ${account.format} format` };
+    const ok: Row[] = reader.parse(pages).map((r, i) => {
+      const amount = Math.round(r.amount * 100) / 100;
+      const description = r.description.replace(/\s+/g, " ").trim();
+      const type = amount < 0 ? "DEBIT" : "CREDIT";
+      // same hash inputs as the CSV path, so a PDF and its converted CSV dedupe against each other
+      return { line: i + 1, date: r.date, account: code, description, amount, type, ref: r.ref, hash: txnHash(code, r.date, amount, description, r.ref) };
+    });
+    return withCategories(ok, []);
+  } catch (e) {
+    // reader self-check failures land here: show them, import nothing
+    return { rows: [], bad: [], error: e instanceof LockedPdfError ? e.message : `Couldn't read PDF: ${(e as Error).message}` };
+  }
+}
+
+async function withCategories(ok: Row[], bad: Bad[]): Promise<Preview> {
+  const [rules, cats] = await Promise.all([
     db.rule.findMany({ select: { keyword: true, categoryId: true } }),
     db.category.findMany({ select: { id: true, name: true } }),
   ]);
@@ -28,7 +59,6 @@ export async function previewCsv(formData: FormData): Promise<Preview> {
     transferId: cats.find((c) => c.name === "Transfer")?.id ?? -1,
   };
 
-  const { ok, bad } = parseStatementCsv(text, accounts.map((a) => a.code));
   const existing = new Set(
     (await db.transaction.findMany({ where: { hash: { in: ok.map((r) => r.hash) } }, select: { hash: true } })).map((t) => t.hash),
   );

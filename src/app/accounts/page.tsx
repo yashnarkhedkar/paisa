@@ -1,5 +1,19 @@
 import { db } from "@/lib/db";
+import { StatementFormat } from "@prisma/client";
 import { createAccount, deleteAccount, renameAccount } from "./actions";
+
+function FormatSelect({ value }: { value?: string | null }) {
+  return (
+    <select name="format" defaultValue={value ?? ""} className="select w-auto" aria-label="Statement format">
+      <option value="">CSV only</option>
+      {Object.values(StatementFormat).map((f) => (
+        <option key={f} value={f}>
+          {f} PDF
+        </option>
+      ))}
+    </select>
+  );
+}
 
 export default async function Accounts() {
   const accounts = await db.account.findMany({ orderBy: { code: "asc" } });
@@ -10,7 +24,10 @@ export default async function Accounts() {
           <h1 className="h1">Accounts</h1>
           <form action="/api/logout" method="post"><button className="btn btn-sm">Logout</button></form>
         </div>
-        <p className="hint">The code is what you write in the CSV account column. One per bank account and credit card.</p>
+        <p className="hint">
+          The code is what you write in the CSV account column. One per bank account and credit card. Set the statement format to upload
+          that bank&apos;s PDF directly.
+        </p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px] lg:items-start">
@@ -23,6 +40,7 @@ export default async function Accounts() {
               <form action={renameAccount} className="flex min-w-0 flex-1 basis-full gap-2 sm:basis-auto">
                 <input type="hidden" name="id" value={a.id} />
                 <input name="name" defaultValue={a.name} required className="input w-auto min-w-0 flex-1" />
+                <FormatSelect value={a.format} />
                 <button className="btn btn-sm">Save</button>
               </form>
               <form action={deleteAccount} className="flex basis-full items-center gap-2 sm:basis-auto">
@@ -44,6 +62,7 @@ export default async function Accounts() {
                 <option>BANK</option>
                 <option>CARD</option>
               </select>
+              <FormatSelect />
             </div>
             <button className="btn-primary w-full">Add</button>
           </form>

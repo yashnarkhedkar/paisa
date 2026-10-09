@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { inr } from "@/lib/format";
 import { importRows, previewCsv, type Preview } from "./actions";
 
-export function UploadForm({ accounts }: { accounts: { code: string; name: string }[] }) {
+export function UploadForm({ accounts }: { accounts: { code: string; name: string; format: string | null }[] }) {
   const [preview, setPreview] = useState<Preview | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
@@ -36,7 +36,7 @@ export function UploadForm({ accounts }: { accounts: { code: string; name: strin
           <input
             type="file"
             name="file"
-            accept=".csv,text/csv"
+            accept=".csv,text/csv,.pdf,application/pdf"
             required
             className="sr-only"
             onChange={(e) => setFileName(e.target.files?.[0]?.name ?? "")}
@@ -60,19 +60,20 @@ export function UploadForm({ accounts }: { accounts: { code: string; name: strin
             </>
           ) : (
             <>
-              <span className="block font-medium">Tap to choose a CSV</span>
-              <span className="hint mt-1 block">date, account, description, amount, type, ref</span>
+              <span className="block font-medium">Tap to choose a PDF statement or CSV</span>
+              <span className="hint mt-1 block">PDF: pick its account below · CSV: date, account, description, amount, type, ref</span>
             </>
           )}
         </label>
 
         <label className="block">
-          <span className="hint">Account for rows where the CSV account column is blank</span>
+          <span className="hint">Account (required for PDF; for CSV, fills a blank account column)</span>
           <select name="account" className="select mt-1">
             <option value="">— use the CSV column —</option>
             {accounts.map((a) => (
               <option key={a.code} value={a.code}>
                 {a.code} · {a.name}
+                {a.format ? ` · ${a.format} PDF` : ""}
               </option>
             ))}
           </select>
