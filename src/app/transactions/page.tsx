@@ -3,8 +3,10 @@ import { inr, monthKey } from "@/lib/format";
 import { merchantKeyword } from "@/lib/categorise";
 import CategoryPicker from "./CategoryPicker";
 import Row, { rupees } from "./Row";
+import SelectAll from "./SelectAll";
+import { bulkSetCategory } from "./actions";
 
-type SP = { month?: string; account?: string; category?: string; q?: string; sort?: string; group?: string };
+type SP = { month?: string; account?: string; category?: string; q?: string; sort?: string; group?: string | string[] };
 
 const SORTS = {
   new: { label: "Newest first", orderBy: [{ date: "desc" }, { id: "desc" }] },
@@ -27,8 +29,10 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
   const account = sp.account ?? "";
   const category = sp.category ?? "";
   const q = sp.q ?? "";
-  const sort: Sort = sp.sort && sp.sort in SORTS ? (sp.sort as Sort) : "new";
-  const grouped = sp.group === "1";
+  const sort: Sort = sp.sort && sp.sort in SORTS ? (sp.sort as Sort) : "spend";
+  // on by default: the hidden "0" is sent when the box is unticked, the box adds "1" when ticked
+  const g = [sp.group ?? []].flat();
+  const grouped = g.includes("1") || !g.includes("0");
 
   const where = {
     date: { gte: start, lt: end },
@@ -113,6 +117,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
           ))}
         </select>
         <label className="flex items-center gap-1.5 text-sm">
+          <input type="hidden" name="group" value="0" />
           <input type="checkbox" name="group" value="1" defaultChecked={grouped} />
           Group similar
         </label>
@@ -137,6 +142,20 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
           .
         </p>
       ) : (
+        <>
+        <form id="bulk" action={bulkSetCategory} className="card flex flex-wrap items-center gap-2 text-sm">
+          <span className="muted">Ticked rows:</span>
+          <select name="categoryId" required className="select w-auto py-1 text-xs" aria-label="Category for ticked rows">
+            <option value="">Pick category</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <button className="btn-primary btn-sm">Set category</button>
+          <SelectAll />
+        </form>
         <div className="card-tight divide-rows overflow-hidden">
           {!grouped
             ? txns.map(row)
@@ -146,6 +165,14 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
                 ) : (
                   <div key={key} className="px-4 py-3 text-sm">
                     <div className="flex items-baseline justify-between gap-3">
+                      <input
+                        type="checkbox"
+                        form="bulk"
+                        name="ids"
+                        value={g.map((t) => t.id).join(",")}
+                        aria-label="Select group"
+                        className="shrink-0 self-center"
+                      />
                       <span className="min-w-0 flex-1 truncate font-medium">
                         {key} <span className="pill ml-1">{g.length}×</span>
                       </span>
@@ -169,6 +196,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
                 ),
               )}
         </div>
+        </>
       )}
 
       <p className="muted tabular-nums">

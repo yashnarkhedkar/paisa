@@ -6,12 +6,19 @@ export type Fallback = { transferId: number; reimbursementId?: number };
 
 const TRANSFER = ["credit card", "cc payment", "card payment"];
 
+/** Does a rule keyword match this narration? Raw text, or the cleaned words merchantKeyword builds keywords from
+ *  ("RAHUL K/SBIN" -> "rahul sbin"), else keywords saved from "group similar" never match their own rows. */
+export function matches(desc: string, keyword: string): boolean {
+  const d = desc.toLowerCase();
+  return d.includes(keyword) || words(d).join(" ").includes(keyword);
+}
+
 export function categorise(desc: string, amount: number, rules: RuleLite[], fallback: Fallback): number | null {
   const d = desc.toLowerCase();
   // Reimbursement rules only claim money coming in (see lib/rules.ts)
   // longest matching keyword wins: "ola cabs" beats "ola", whichever rule was added first
   const rule = rules
-    .filter((r) => d.includes(r.keyword) && !(r.categoryId === fallback.reimbursementId && amount < 0))
+    .filter((r) => matches(d, r.keyword) && !(r.categoryId === fallback.reimbursementId && amount < 0))
     .reduce<RuleLite | undefined>((best, r) => (!best || r.keyword.length > best.keyword.length ? r : best), undefined);
   if (rule) return rule.categoryId;
   if (TRANSFER.some((k) => d.includes(k))) return fallback.transferId;
@@ -19,6 +26,12 @@ export function categorise(desc: string, amount: number, rules: RuleLite[], fall
   // category blocks rules added later (they only touch uncategorised rows). Salary gets its own rule instead.
   return null;
 }
+
+const words = (lower: string) =>
+  lower
+    .replace(/[^a-z\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length >= 3 && !NOISE.has(w));
 
 const NOISE = new Set(["upi", "dr", "cr", "neft", "imps", "rtgs", "pos", "ach", "nach", "pay", "payment", "to", "from", "by", "the", "of", "india", "ltd", "pvt", "inr", "ref", "txn", "ecom", "atm"]);
 
@@ -30,13 +43,9 @@ const NOISE = new Set(["upi", "dr", "cr", "neft", "imps", "rtgs", "pos", "ach", 
 export function merchantKeyword(description: string): string {
   const vpa = description.toLowerCase().match(/([a-z0-9][a-z0-9._-]{3,})@[a-z]/);
   if (vpa) return `${vpa[1]}@`;
-  const words = description
-    .toLowerCase()
-    .replace(/[^a-z\s]/g, " ")
-    .split(/\s+/)
-    .filter((w) => w.length >= 3 && !NOISE.has(w));
-  let kw = words.slice(0, 2).join(" ");
-  if (kw.length < 5) kw = words.slice(0, 3).join(" ");
+  const w = words(description.toLowerCase());
+  let kw = w.slice(0, 2).join(" ");
+  if (kw.length < 5) kw = w.slice(0, 3).join(" ");
   // ponytail: min 5 chars, else "ola" matches "chocolate"
   return kw.length >= 5 ? kw : "";
 }

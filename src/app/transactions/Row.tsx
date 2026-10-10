@@ -21,6 +21,7 @@ export default function Row({ id, date, description, accountCode, amount, catego
     <div className={`px-4 py-3 text-sm ${categoryId === null ? "border-l-2 border-amber-400" : ""}`}>
       {/* line 1: merchant + amount */}
       <div className="flex items-baseline justify-between gap-3">
+        <input type="checkbox" form="bulk" name="ids" value={id} aria-label="Select" className="shrink-0 self-center" />
         <span className="min-w-0 flex-1 truncate font-medium" title={description}>
           {description}
         </span>

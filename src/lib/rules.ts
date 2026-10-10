@@ -1,19 +1,20 @@
 import { db } from "@/lib/db";
+import { matches } from "@/lib/categorise";
 
 /**
- * Tag still-uncategorised rows whose description contains the keyword. Returns rows tagged.
+ * Tag still-uncategorised rows the keyword matches (same matcher as import). Returns rows tagged.
  * Reimbursement rules only match money coming in: a friend's UPI id also appears on what you send them,
  * and that is real spending.
  */
 export async function applyRule(keyword: string, categoryId: number, reimbursementId?: number) {
-  const { count } = await db.transaction.updateMany({
-    where: {
-      categoryId: null,
-      description: { contains: keyword, mode: "insensitive" },
-      ...(categoryId === reimbursementId ? { amount: { gt: 0 } } : {}),
-    },
-    data: { categoryId },
+  // ponytail: scans uncategorised rows in JS (matcher isn't SQL-able); fine at a few thousand rows
+  const rows = await db.transaction.findMany({
+    where: { categoryId: null, ...(categoryId === reimbursementId ? { amount: { gt: 0 } } : {}) },
+    select: { id: true, description: true },
   });
+  const ids = rows.filter((r) => matches(r.description, keyword)).map((r) => r.id);
+  if (!ids.length) return 0;
+  const { count } = await db.transaction.updateMany({ where: { id: { in: ids } }, data: { categoryId } });
   return count;
 }
 

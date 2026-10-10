@@ -29,3 +29,11 @@ export async function rememberRule(keyword: string, categoryId: number): Promise
   refresh();
   return count;
 }
+
+/** Bulk bar: rows' tick boxes belong to <form id="bulk"> via the form attribute, so no client state is needed. */
+export async function bulkSetCategory(fd: FormData) {
+  // a group's box carries all its ids comma-joined
+  const ids = fd.getAll("ids").flatMap((v) => String(v).split(",")).map(Number).filter(Boolean);
+  const v = String(fd.get("categoryId") ?? "");
+  await setCategory(ids, v ? Number(v) : null);
+}
