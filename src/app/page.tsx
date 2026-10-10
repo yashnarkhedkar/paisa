@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { LOCKED, merchantKeyword } from "@/lib/categorise";
+import { merchantKeyword } from "@/lib/categorise";
+import { isSaving, summarise } from "@/lib/summary";
 import { inr, monthKey } from "@/lib/format";
-import { CategoryBar, DailyArea, SpendPie } from "./Charts";
+import { CategoryBar, DailyArea, SpendPie, TrendLines } from "./Charts";
 
 function monthRange(m: string) {
   const [y, mo] = m.split("-").map(Number);
@@ -27,27 +28,32 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
   const month = /^\d{4}-\d{2}$/.test(sp.month ?? "") ? sp.month! : current;
   const { start, end } = monthRange(month);
 
-  const raw = await db.transaction.findMany({
-    where: { date: { gte: start, lt: end } },
-    include: { category: true },
-  });
-  const txns = raw.map((t) => ({ ...t, amount: Number(t.amount) }));
+  // one query for the 6-month window: this month, last month (deltas) and the trend all come from it
+  const trendStart = monthRange(shift(month, -5)).start;
+  const [raw, goalsRaw, fixedRaw, budgetCats] = await Promise.all([
+    db.transaction.findMany({ where: { date: { gte: trendStart, lt: end } }, include: { category: true } }),
+    db.goal.findMany({ orderBy: { createdAt: "asc" } }),
+    db.fixedPayment.findMany({ orderBy: { amount: "desc" } }),
+    db.category.findMany({ where: { budget: { not: null } }, orderBy: { name: "asc" } }),
+  ]);
+  const all = raw.map((t) => ({ ...t, amount: Number(t.amount) }));
+  const inMonth = (m: string) => all.filter((t) => monthKey(t.date) === m);
+  const txns = inMonth(month);
+  const cur = summarise(txns);
+  const prevMonth = shift(month, -1);
+  const prev = summarise(inMonth(prevMonth));
+  const trend = Array.from({ length: 6 }, (_, i) => shift(month, i - 5)).map((m) => ({
+    month: monthTitle(m).slice(0, 3),
+    ...summarise(inMonth(m)),
+  }));
 
   const spendTx = txns.filter((t) => t.amount < 0 && (t.category?.isSpending ?? true));
-  // friends paying back their share cut your spending; they are not income
-  const reimbursed = txns
-    .filter((t) => t.amount > 0 && t.category?.name === "Reimbursement")
-    .reduce((s, t) => s + t.amount, 0);
-  const spent = spendTx.reduce((s, t) => s - t.amount, 0) - reimbursed;
-  const income = txns
-    .filter((t) => t.amount > 0 && t.category?.name === "Income")
-    .reduce((s, t) => s + t.amount, 0);
-  const net = income - spent;
+  const reimbursed = txns.filter((t) => t.amount > 0 && t.category?.name === "Reimbursement").reduce((s, t) => s + t.amount, 0);
+  const { spent, income, net, saved: investNet } = cur;
   const uncat = txns.filter((t) => t.categoryId === null).length;
 
   // Money in: new money only. Own-account transfers and savings coming back (FD maturity) are not new money;
   // the latter shows as "came back" in the investments card.
-  const isSaving = (c: { name: string; isSpending: boolean } | null) => !!c && !c.isSpending && !LOCKED.includes(c.name);
   const inMap = new Map<string, number>();
   let movedIn = 0;
   for (const t of txns) {
@@ -69,13 +75,39 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
     invMap.set(c.name, v);
   }
   const invest = [...invMap].map(([name, v]) => ({ name, ...v, net: v.out - v.in })).sort((a, b) => b.net - a.net);
-  const investNet = invest.reduce((s, i) => s + i.net, 0);
 
   const byCatMap = new Map<string, number>();
   for (const t of spendTx) {
     const k = t.category?.name ?? "Uncategorised";
     byCatMap.set(k, (byCatMap.get(k) ?? 0) - t.amount);
   }
+  // Budgets compare this month's spend per category (before paybacks; those aren't tied to a category)
+  const budgets = budgetCats.map((c) => {
+    const used = byCatMap.get(c.name) ?? 0;
+    const limit = Number(c.budget);
+    return { name: c.name, used, limit, pct: limit > 0 ? used / limit : 0 };
+  });
+
+  // Goal progress = already saved + net put into its category since countFrom (all months, not just this one)
+  const today = new Date();
+  const goals = await Promise.all(
+    goalsRaw.map(async (g) => {
+      const agg = g.categoryId
+        ? await db.transaction.aggregate({ where: { categoryId: g.categoryId, date: { gte: g.countFrom } }, _sum: { amount: true } })
+        : null;
+      const have = Number(g.base) - Number(agg?._sum.amount ?? 0);
+      const target = Number(g.target);
+      const monthsLeft = g.deadline
+        ? // months from today (not the month being viewed) to the deadline
+          Math.max(1, (g.deadline.getUTCFullYear() - today.getUTCFullYear()) * 12 + g.deadline.getUTCMonth() - today.getUTCMonth())
+        : null;
+      return { id: g.id, name: g.name, have, target, deadline: g.deadline, perMonth: monthsLeft ? Math.max(0, (target - have) / monthsLeft) : null };
+    }),
+  );
+
+  const fixed = fixedRaw.map((f) => ({ id: f.id, name: f.name, amount: Number(f.amount) }));
+  const fixedTotal = fixed.reduce((s, f) => s + f.amount, 0);
+
   const byCat = [...byCatMap].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
 
   const days = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0)).getUTCDate();
@@ -135,22 +167,49 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
       </div>
     );
 
-  const stat = (label: string, value: string, cls = "", sub?: string) => (
+  const prevName = monthTitle(prevMonth).slice(0, 3);
+  // "↑ 12% vs Aug". For Spent, up is bad; for Income/Saved, up is good. Arrow + words carry the meaning, colour only helps.
+  const delta = (now: number, before: number, upIsGood: boolean) => {
+    if (!before) return undefined;
+    const pct = Math.round(((now - before) / Math.abs(before)) * 100);
+    if (pct === 0) return { text: `same as ${prevName}`, cls: "text-muted" };
+    const good = pct > 0 === upIsGood;
+    // a tiny last month makes % meaningless ("28787%"), so show the rupee change instead
+    const size = Math.abs(pct) > 300 ? inr(Math.abs(now - before)) : `${Math.abs(pct)}%`;
+    return { text: `${pct > 0 ? "↑" : "↓"} ${size} vs ${prevName}`, cls: good ? "text-pos" : "text-neg" };
+  };
+  const stat = (label: string, value: string, cls = "", sub?: string, d?: { text: string; cls: string }) => (
     <div className="card">
       <div className="stat-label">{label}</div>
       <div className={`stat-value ${cls}`}>{value}</div>
+      {d && <div className={`mt-1 text-xs font-medium ${d.cls}`}>{d.text}</div>}
       {sub && <div className="hint mt-1">{sub}</div>}
     </div>
   );
   const saveRate = income > 0 ? Math.round((investNet / income) * 100) : null;
+  const bar = (pct: number, color: string) => (
+    <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-bg" role="presentation">
+      <div className="h-full rounded-full" style={{ width: `${Math.min(100, Math.max(0, pct * 100))}%`, background: color }} />
+    </div>
+  );
+  // status palette (dataviz reference): good / warning / critical, always next to a text label
+  const budgetColor = (pct: number) => (pct > 1 ? "#d03b3b" : pct >= 0.8 ? "#fab219" : "#0ca30c");
+  const empty = (text: string) => (
+    <p className="muted">
+      {text}{" "}
+      <Link href="/plan" className="underline">
+        Set up on Plan
+      </Link>
+    </p>
+  );
 
   return (
     <div>
       {nav}
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {stat("Spent", inr(spent), "text-neg", reimbursed > 0 ? `${inr(spent + reimbursed)} before friends paid back` : undefined)}
-        {stat("Income", inr(income), "text-pos")}
-        {stat("Saved", inr(investNet), investNet < 0 ? "text-neg" : "text-pos", saveRate !== null ? `${saveRate}% of income` : undefined)}
+        {stat("Spent", inr(spent), "text-neg", reimbursed > 0 ? `${inr(spent + reimbursed)} before friends paid back` : undefined, delta(spent, prev.spent, false))}
+        {stat("Income", inr(income), "text-pos", undefined, delta(income, prev.income, true))}
+        {stat("Saved", inr(investNet), investNet < 0 ? "text-neg" : "text-pos", saveRate !== null ? `${saveRate}% of income` : undefined, delta(investNet, prev.saved, true))}
         {stat("Net", inr(net), net < 0 ? "text-neg" : "text-pos", "income − spent")}
         <Link
           href={`/transactions?month=${month}&category=none`}
@@ -168,17 +227,65 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
           <SpendPie data={byCat} />
         </div>
         <div className="card">
-          <h2 className="h2 mb-3">Cumulative spend</h2>
-          <DailyArea data={daily} />
+          <h2 className="h2 mb-3">Last 6 months</h2>
+          <TrendLines data={trend} />
         </div>
       </div>
 
       <div className="mb-6 grid gap-3 lg:grid-cols-2">
         <div className="card">
-          <h2 className="h2 mb-3">Money in</h2>
-          {moneyIn.length ? <CategoryBar data={moneyIn} label="Received" /> : <p className="muted">Nothing came in.</p>}
-          {movedIn > 0 && <p className="hint mt-2">{inr(movedIn)} was your own money (account transfers, savings coming back), not counted.</p>}
+          <h2 className="h2 mb-3">Budgets</h2>
+          {budgets.length === 0
+            ? empty("No budgets yet.")
+            : (
+              <ul className="space-y-3 text-sm">
+                {budgets.map((b) => (
+                  <li key={b.name}>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="font-medium">{b.name}</span>
+                      <span className="tabular-nums">
+                        {inr(b.used)} <span className="text-muted">of {inr(b.limit)}</span>
+                      </span>
+                    </div>
+                    {bar(b.pct, budgetColor(b.pct))}
+                    <div className={`mt-1 text-xs ${b.pct > 1 ? "text-neg font-medium" : "text-muted"}`}>
+                      {b.pct > 1 ? `Over by ${inr(b.used - b.limit)}` : b.pct >= 0.8 ? `${Math.round(b.pct * 100)}% used, close to limit` : `${inr(b.limit - b.used)} left`}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
         </div>
+        <div className="card">
+          <h2 className="h2 mb-3">Goals</h2>
+          {goals.length === 0
+            ? empty("No goals yet.")
+            : (
+              <ul className="space-y-3 text-sm">
+                {goals.map((g) => (
+                  <li key={g.id}>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="font-medium">{g.name}</span>
+                      <span className="tabular-nums">
+                        {inr(g.have)} <span className="text-muted">of {inr(g.target)}</span>
+                      </span>
+                    </div>
+                    {bar(g.have / g.target, "#2a78d6")}
+                    <div className="mt-1 text-xs text-muted">
+                      {g.have >= g.target
+                        ? "Reached"
+                        : `${Math.round((g.have / g.target) * 100)}% · ${inr(g.target - g.have)} to go`}
+                      {g.deadline && g.have < g.target && g.perMonth !== null &&
+                        ` · ${inr(g.perMonth)}/month to hit ${g.deadline.toLocaleDateString("en-IN", { month: "short", year: "numeric", timeZone: "UTC" })}`}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+        </div>
+      </div>
+
+      <div className="mb-6 grid gap-3 lg:grid-cols-2">
         <div className="card">
           <div className="mb-3 flex items-baseline justify-between gap-3">
             <h2 className="h2">Savings &amp; investments</h2>
@@ -204,6 +311,43 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
               ))}
             </div>
           )}
+        </div>
+        <div className="card">
+          <div className="mb-3 flex items-baseline justify-between gap-3">
+            <h2 className="h2">Fixed every month</h2>
+            <span className="font-medium tabular-nums">{inr(fixedTotal)}</span>
+          </div>
+          {fixed.length === 0
+            ? empty("No fixed payments yet.")
+            : (
+              <>
+                <ul className="divide-rows -mx-4 text-sm">
+                  {fixed.map((f) => (
+                    <li key={f.id} className="flex gap-3 px-4 py-2">
+                      <span className="min-w-0 flex-1 truncate">{f.name}</span>
+                      <span className="tabular-nums">{inr(f.amount)}</span>
+                    </li>
+                  ))}
+                </ul>
+                {income > 0 && (
+                  <p className="hint mt-3">
+                    {inr(income - fixedTotal)} of this month&apos;s income is left after fixed payments.
+                  </p>
+                )}
+              </>
+            )}
+        </div>
+      </div>
+
+      <div className="mb-6 grid gap-3 lg:grid-cols-2">
+        <div className="card">
+          <h2 className="h2 mb-3">Money in</h2>
+          {moneyIn.length ? <CategoryBar data={moneyIn} label="Received" /> : <p className="muted">Nothing came in.</p>}
+          {movedIn > 0 && <p className="hint mt-2">{inr(movedIn)} was your own money (account transfers, savings coming back), not counted.</p>}
+        </div>
+        <div className="card">
+          <h2 className="h2 mb-3">Cumulative spend</h2>
+          <DailyArea data={daily} />
         </div>
       </div>
 

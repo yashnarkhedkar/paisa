@@ -7,6 +7,9 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  Legend,
+  Line,
+  LineChart,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -111,6 +114,32 @@ export function SpendPie({ data }: { data: { name: string; value: number }[] }) 
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+// Income / Spent / Saved keep slots 1-3 in every month so a line's colour always means the same thing.
+const TREND = [
+  { key: "income", label: "Income", color: SLICE[0] },
+  { key: "spent", label: "Spent", color: SLICE[1] },
+  { key: "saved", label: "Saved", color: SLICE[2] },
+] as const;
+
+export function TrendLines({ data }: { data: { month: string; income: number; spent: number; saved: number }[] }) {
+  return (
+    <div className="w-full" style={{ height: 240 }}>
+      <ResponsiveContainer>
+        <LineChart data={data} margin={{ left: 0, right: 16, top: 4, bottom: 0 }}>
+          <CartesianGrid vertical={false} stroke={line} />
+          <XAxis dataKey="month" tick={tick} axisLine={false} tickLine={false} />
+          <YAxis tickFormatter={fmt} tick={tick} width={70} axisLine={false} tickLine={false} />
+          <Tooltip {...tooltipCommon} cursor={{ stroke: line }} formatter={(v, n) => [fmt(v), n]} />
+          <Legend iconType="plainline" wrapperStyle={{ fontSize: 12, color: muted }} />
+          {TREND.map((t) => (
+            <Line key={t.key} dataKey={t.key} name={t.label} stroke={t.color} strokeWidth={2} dot={{ r: 4, strokeWidth: 2, fill: "#fff" }} activeDot={{ r: 5 }} />
+          ))}
+        </LineChart>
+      </ResponsiveContainer>
     </div>
   );
 }

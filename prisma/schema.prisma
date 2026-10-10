@@ -41,8 +41,31 @@ model Category {
   id           Int           @id @default(autoincrement())
   name         String        @unique
   isSpending   Boolean       @default(true)
+  budget       Decimal?      @db.Decimal(14, 2) // monthly limit; null = no budget
   rules        Rule[]
   transactions Transaction[]
+  goals        Goal[]
+}
+
+/// Progress = base + net put into `category` on/after `countFrom` (so money already in `base` isn't counted twice).
+model Goal {
+  id         Int       @id @default(autoincrement())
+  name       String
+  target     Decimal   @db.Decimal(14, 2)
+  base       Decimal   @default(0) @db.Decimal(14, 2)
+  countFrom  DateTime  @default(now()) @db.Date
+  deadline   DateTime? @db.Date
+  categoryId Int?
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  createdAt  DateTime  @default(now())
+}
+
+/// Known monthly commitments (rent, insurance, SIP...). Manual list; shown on home.
+model FixedPayment {
+  id        Int      @id @default(autoincrement())
+  name      String
+  amount    Decimal  @db.Decimal(14, 2)
+  createdAt DateTime @default(now())
 }
 
 model Rule {
