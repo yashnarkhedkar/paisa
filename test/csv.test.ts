@@ -42,12 +42,12 @@ describe("parseStatementCsv", () => {
 });
 
 describe("categorise", () => {
-  const fb = { incomeId: 14, transferId: 15 };
+  const fb = { transferId: 15 };
   it("matches a rule", () => {
     expect(categorise("SWIGGY BANGALORE", -450, [{ keyword: "swiggy", categoryId: 1 }], fb)).toBe(1);
   });
-  it("falls back to income for credits", () => {
-    expect(categorise("SALARY XBP ASIA", 117483, [], fb)).toBe(14);
+  it("leaves unmatched credits uncategorised (no Income guess)", () => {
+    expect(categorise("UPI/123/UPI/friend@ybl", 5000, [], fb)).toBeNull();
   });
   it("falls back to transfer for card payments", () => {
     expect(categorise("HDFC CREDIT CARD PAYMENT", -5000, [], fb)).toBe(15);

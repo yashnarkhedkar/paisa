@@ -2,7 +2,7 @@
 export const LOCKED = ["Income", "Transfer", "Reimbursement"];
 
 export type RuleLite = { keyword: string; categoryId: number };
-export type Fallback = { incomeId: number; transferId: number; reimbursementId?: number };
+export type Fallback = { transferId: number; reimbursementId?: number };
 
 const TRANSFER = ["credit card", "cc payment", "card payment"];
 
@@ -15,7 +15,8 @@ export function categorise(desc: string, amount: number, rules: RuleLite[], fall
     .reduce<RuleLite | undefined>((best, r) => (!best || r.keyword.length > best.keyword.length ? r : best), undefined);
   if (rule) return rule.categoryId;
   if (TRANSFER.some((k) => d.includes(k))) return fallback.transferId;
-  if (amount > 0) return fallback.incomeId;
+  // No "credit = Income" guess: own-account transfers and friends paying back are credits too, and a guessed
+  // category blocks rules added later (they only touch uncategorised rows). Salary gets its own rule instead.
   return null;
 }
 
