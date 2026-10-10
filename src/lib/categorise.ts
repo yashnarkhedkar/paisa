@@ -27,6 +27,27 @@ export function categorise(desc: string, amount: number, rules: RuleLite[], fall
   return null;
 }
 
+/**
+ * Who a credit came from, readable: the first narration segment that looks like a name or a UPI id.
+ * "NEFT-SCBLH181007-ACME SOFTWARE PRIVATE" -> "ACME SOFTWARE PRIVATE", "UPI/1/12:00:00/UPI/9000000001@ybl/Paym" -> "9000000001@ybl".
+ */
+export function payer(description: string): string {
+  const seg = description
+    .split(/[/,-]/)
+    .map((s) => s.trim())
+    .find((s) => {
+      const letters = (s.match(/[a-z]/gi) ?? []).length;
+      const digits = (s.match(/\d/g) ?? []).length;
+      if (s.includes("@")) return letters >= 2;
+      if (STOP.has(s.toLowerCase())) return false;
+      // a name: words with more letters than digits, or one clean word ("AMUL", "ERODHABROKING")
+      return s.includes(" ") ? letters >= 3 && letters > digits : letters >= 4 && digits === 0;
+    });
+  return seg ?? description.trim();
+}
+// narration codes that look like words
+const STOP = new Set(["upi", "neft", "imps", "rtgs", "mbk", "achcr", "achdr", "paym", "sent", "paid", "payment"]);
+
 const words = (lower: string) =>
   lower
     .replace(/[^a-z\s]/g, " ")

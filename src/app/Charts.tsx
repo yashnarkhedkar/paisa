@@ -118,6 +118,26 @@ export function SpendPie({ data }: { data: { name: string; value: number }[] }) 
   );
 }
 
+/** Card spend per month, one stacked bar segment per card (colour = card, same order everywhere on /cards). */
+export function CardMonthly({ data, cards }: { data: Record<string, string | number>[]; cards: string[] }) {
+  return (
+    <div className="w-full" style={{ height: 240 }}>
+      <ResponsiveContainer>
+        <BarChart data={data} margin={{ left: 0, right: 16, top: 4, bottom: 0 }}>
+          <CartesianGrid vertical={false} stroke={line} />
+          <XAxis dataKey="month" tick={tick} axisLine={false} tickLine={false} />
+          <YAxis tickFormatter={fmt} tick={tick} width={70} axisLine={false} tickLine={false} />
+          <Tooltip {...tooltipCommon} formatter={(v, n) => [fmt(v), n]} />
+          <Legend iconType="square" wrapperStyle={{ fontSize: 12, color: muted }} />
+          {cards.map((c, i) => (
+            <Bar key={c} dataKey={c} stackId="spend" fill={SLICE[i % SLICE.length]} />
+          ))}
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 // Income / Spent / Saved keep slots 1-3 in every month so a line's colour always means the same thing.
 const TREND = [
   { key: "income", label: "Income", color: SLICE[0] },

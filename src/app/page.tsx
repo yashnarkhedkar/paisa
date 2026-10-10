@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { merchantKeyword } from "@/lib/categorise";
+import { merchantKeyword, payer } from "@/lib/categorise";
 import { isSaving, summarise } from "@/lib/summary";
 import { inr, monthKey } from "@/lib/format";
-import { CategoryBar, DailyArea, SpendPie, TrendLines } from "./Charts";
+import { DailyArea, SpendPie, TrendLines } from "./Charts";
 
 function monthRange(m: string) {
   const [y, mo] = m.split("-").map(Number);
@@ -31,7 +31,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
   // one query for the 6-month window: this month, last month (deltas) and the trend all come from it
   const trendStart = monthRange(shift(month, -5)).start;
   const [raw, goalsRaw, fixedRaw, budgetCats] = await Promise.all([
-    db.transaction.findMany({ where: { date: { gte: trendStart, lt: end } }, include: { category: true } }),
+    db.transaction.findMany({ where: { date: { gte: trendStart, lt: end } }, include: { category: true, account: true } }),
     db.goal.findMany({ orderBy: { createdAt: "asc" } }),
     db.fixedPayment.findMany({ orderBy: { amount: "desc" } }),
     db.category.findMany({ where: { budget: { not: null } }, orderBy: { name: "asc" } }),
@@ -52,16 +52,17 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
   const { spent, income, net, saved: investNet } = cur;
   const uncat = txns.filter((t) => t.categoryId === null).length;
 
-  // Money in: new money only. Own-account transfers and savings coming back (FD maturity) are not new money;
-  // the latter shows as "came back" in the investments card.
-  const inMap = new Map<string, number>();
-  let movedIn = 0;
+  // Top money in: who sent money, grouped by sender. Card credits are you paying the bill, so skipped.
+  const inMap = new Map<string, { name: string; total: number; count: number; category: string }>();
   for (const t of txns) {
-    if (t.amount <= 0) continue;
-    if (t.category?.name === "Transfer" || isSaving(t.category)) movedIn += t.amount;
-    else inMap.set(t.category?.name ?? "Uncategorised", (inMap.get(t.category?.name ?? "Uncategorised") ?? 0) + t.amount);
+    if (t.amount <= 0 || t.account.kind === "CARD") continue;
+    const name = payer(t.description);
+    const v = inMap.get(name.toLowerCase()) ?? { name, total: 0, count: 0, category: t.category?.name ?? "Uncategorised" };
+    v.total += t.amount;
+    v.count += 1;
+    inMap.set(name.toLowerCase(), v);
   }
-  const moneyIn = [...inMap].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+  const moneyIn = [...inMap.values()].sort((a, b) => b.total - a.total).slice(0, 8);
 
   // Savings & investments: non-spending categories that aren't income/transfer/reimbursement (Gold, FD, Investment...).
   // Out = put in, in = came back (FD maturity, sold stock); net = what stayed invested this month.
@@ -341,9 +342,23 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
 
       <div className="mb-6 grid gap-3 lg:grid-cols-2">
         <div className="card">
-          <h2 className="h2 mb-3">Money in</h2>
-          {moneyIn.length ? <CategoryBar data={moneyIn} label="Received" /> : <p className="muted">Nothing came in.</p>}
-          {movedIn > 0 && <p className="hint mt-2">{inr(movedIn)} was your own money (account transfers, savings coming back), not counted.</p>}
+          <h2 className="h2 mb-3">Top money in</h2>
+          {moneyIn.length ? (
+            <ul className="divide-rows -mx-4 text-sm">
+              {moneyIn.map((m) => (
+                <li key={m.name} className="row px-4">
+                  <span className="min-w-0 flex-1 truncate" title={m.name}>
+                    {m.name}
+                  </span>
+                  <span className="pill shrink-0">{m.category}</span>
+                  {m.count > 1 && <span className="hint shrink-0">{m.count}×</span>}
+                  <span className="amount-pos w-24 shrink-0 text-right tabular-nums">{inr(m.total)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="muted">Nothing came in.</p>
+          )}
         </div>
         <div className="card">
           <h2 className="h2 mb-3">Cumulative spend</h2>
