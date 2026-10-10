@@ -45,12 +45,14 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
   const net = income - spent;
   const uncat = txns.filter((t) => t.categoryId === null).length;
 
-  // Money in: everything positive except shuffling between your own accounts (not new money)
+  // Money in: new money only. Own-account transfers and savings coming back (FD maturity) are not new money;
+  // the latter shows as "came back" in the investments card.
+  const isSaving = (c: { name: string; isSpending: boolean } | null) => !!c && !c.isSpending && !LOCKED.includes(c.name);
   const inMap = new Map<string, number>();
   let movedIn = 0;
   for (const t of txns) {
     if (t.amount <= 0) continue;
-    if (t.category?.name === "Transfer") movedIn += t.amount;
+    if (t.category?.name === "Transfer" || isSaving(t.category)) movedIn += t.amount;
     else inMap.set(t.category?.name ?? "Uncategorised", (inMap.get(t.category?.name ?? "Uncategorised") ?? 0) + t.amount);
   }
   const moneyIn = [...inMap].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
@@ -60,7 +62,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
   const invMap = new Map<string, { out: number; in: number }>();
   for (const t of txns) {
     const c = t.category;
-    if (!c || c.isSpending || LOCKED.includes(c.name)) continue;
+    if (!c || !isSaving(c)) continue;
     const v = invMap.get(c.name) ?? { out: 0, in: 0 };
     if (t.amount < 0) v.out -= t.amount;
     else v.in += t.amount;
@@ -172,7 +174,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
         <div className="card">
           <h2 className="h2 mb-3">Money in</h2>
           {moneyIn.length ? <CategoryBar data={moneyIn} label="Received" /> : <p className="muted">Nothing came in.</p>}
-          {movedIn > 0 && <p className="hint mt-2">{inr(movedIn)} moved between your own accounts, not counted.</p>}
+          {movedIn > 0 && <p className="hint mt-2">{inr(movedIn)} was your own money (account transfers, savings coming back), not counted.</p>}
         </div>
         <div className="card">
           <div className="mb-3 flex items-baseline justify-between gap-3">
