@@ -4,7 +4,10 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  url       = env("DATABASE_URL")
+  // migrations take a session lock; through Neon's pooler the unlock can land on another connection and the
+  // lock leaks, hanging every later build. Migrations go direct (Neon URL without "-pooler").
+  directUrl = env("DIRECT_URL")
 }
 
 enum AccountKind {

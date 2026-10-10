@@ -54,7 +54,7 @@ Password hash (base64 so `$` chars survive env loaders): `node -e "console.log(B
 
 1. Neon.tech → new project → copy connection string.
 2. Locally: `DATABASE_URL=<neon> npx prisma migrate deploy && DATABASE_URL=<neon> npx prisma db seed`
-3. Push to GitHub. Vercel → import repo → set the 4 env vars (incl. `STATEMENT_PASSWORDS`) → deploy.
+3. Push to GitHub. Vercel → import repo → set the env vars: `DATABASE_URL` (Neon pooled), `DIRECT_URL` (same, host without `-pooler`), `APP_PASSWORD_HASH_B64`, `SESSION_SECRET`, `STATEMENT_PASSWORDS` → deploy.
 4. Open on phone → "Add to Home Screen".
 
 ## Tests
