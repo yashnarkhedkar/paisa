@@ -9,7 +9,7 @@ const TRANSFER = ["credit card", "cc payment", "card payment"];
 export function categorise(desc: string, amount: number, rules: RuleLite[], fallback: Fallback): number | null {
   const d = desc.toLowerCase();
   // Reimbursement rules only claim money coming in (see lib/rules.ts)
-  // longest matching keyword wins: "yash santosh" (FD) beats "yash san" (own UPI)
+  // longest matching keyword wins: "ola cabs" beats "ola", whichever rule was added first
   const rule = rules
     .filter((r) => d.includes(r.keyword) && !(r.categoryId === fallback.reimbursementId && amount < 0))
     .reduce<RuleLite | undefined>((best, r) => (!best || r.keyword.length > best.keyword.length ? r : best), undefined);
