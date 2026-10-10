@@ -38,7 +38,7 @@ export function Nav() {
     <>
       {/* Desktop top bar */}
       <header className="sticky top-0 z-10 hidden border-b border-line bg-surface/80 backdrop-blur sm:block">
-        <div className="mx-auto flex h-14 max-w-5xl items-center gap-1 px-6">
+        <div className="mx-auto flex h-14 max-w-7xl items-center gap-1 px-6">
           <Link href="/" className="mr-4 text-base font-semibold tracking-tight">
             Paisa
           </Link>

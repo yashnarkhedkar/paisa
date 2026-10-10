@@ -2,7 +2,7 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { LOCKED, merchantKeyword } from "@/lib/categorise";
 import { inr, monthKey } from "@/lib/format";
-import { CategoryBar, DailyArea } from "./Charts";
+import { CategoryBar, DailyArea, SpendPie } from "./Charts";
 
 function monthRange(m: string) {
   const [y, mo] = m.split("-").map(Number);
@@ -135,20 +135,23 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
       </div>
     );
 
-  const stat = (label: string, value: string, cls = "") => (
+  const stat = (label: string, value: string, cls = "", sub?: string) => (
     <div className="card">
       <div className="stat-label">{label}</div>
       <div className={`stat-value ${cls}`}>{value}</div>
+      {sub && <div className="hint mt-1">{sub}</div>}
     </div>
   );
+  const saveRate = income > 0 ? Math.round((investNet / income) * 100) : null;
 
   return (
     <div>
       {nav}
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {stat("Spent", inr(spent), "text-neg")}
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {stat("Spent", inr(spent), "text-neg", reimbursed > 0 ? `${inr(spent + reimbursed)} before friends paid back` : undefined)}
         {stat("Income", inr(income), "text-pos")}
-        {stat("Net", inr(net), net < 0 ? "text-neg" : "text-pos")}
+        {stat("Saved", inr(investNet), investNet < 0 ? "text-neg" : "text-pos", saveRate !== null ? `${saveRate}% of income` : undefined)}
+        {stat("Net", inr(net), net < 0 ? "text-neg" : "text-pos", "income − spent")}
         <Link
           href={`/transactions?month=${month}&category=none`}
           className={`card transition hover:bg-bg ${uncat > 0 ? "bg-[#fff8e6] border-[#f3e3b5]" : ""}`}
@@ -162,7 +165,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
       <div className="mb-6 grid gap-3 lg:grid-cols-2">
         <div className="card">
           <h2 className="h2 mb-3">Spend by category</h2>
-          <CategoryBar data={byCat} />
+          <SpendPie data={byCat} />
         </div>
         <div className="card">
           <h2 className="h2 mb-3">Cumulative spend</h2>
