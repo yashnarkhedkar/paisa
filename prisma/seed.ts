@@ -5,7 +5,7 @@ const categories: [string, boolean][] = [
   ["Food", true], ["Groceries", true], ["Transport", true], ["Shopping", true],
   ["Bills", true], ["Rent", true], ["Health", true], ["Entertainment", true],
   ["Subscriptions", true], ["Family", true], ["Fees", true], ["Other", true],
-  ["Investment", false], ["Income", false], ["Transfer", false], ["Reimbursement", false],
+  ["Investment", false], ["Gold", false], ["FD", false], ["Income", false], ["Transfer", false], ["Reimbursement", false],
 ];
 const accounts: [string, string, "BANK" | "CARD"][] = [
   ["HDFC-SAV", "HDFC Savings", "BANK"],
@@ -23,8 +23,8 @@ const accounts: [string, string, "BANK" | "CARD"][] = [
 
 // keyword (lowercase substring of description) -> category. Starter rules; edit on /rules.
 const rules: [string, string][] = [
-  ["zerodha", "Investment"], ["gold scheme", "Investment"], ["fixed deposit", "Investment"],
-  ["card payment", "Transfer"], ["cred.club", "Transfer"], ["payment received", "Transfer"], ["kalyan", "Investment"], ["cc payment", "Transfer"], ["credit card", "Transfer"],
+  ["zerodha", "Investment"], ["gold scheme", "Gold"], ["fixed deposit", "FD"],
+  ["card payment", "Transfer"], ["cred.club", "Transfer"], ["payment received", "Transfer"], ["kalyan", "Gold"], ["cc payment", "Transfer"], ["credit card", "Transfer"],
   ["hdfc life", "Bills"], ["hdfclifeins", "Bills"], ["salary", "Income"],
   ["swiggy", "Food"], ["zomato", "Food"], ["bigbasket", "Groceries"], ["blinkit", "Groceries"],
   ["uber", "Transport"], ["ola cabs", "Transport"], ["olacabs", "Transport"], ["rapido", "Transport"],

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
+import { LOCKED, merchantKeyword } from "@/lib/categorise";
 import { inr, monthKey } from "@/lib/format";
 import { CategoryBar, DailyArea } from "./Charts";
 
@@ -44,6 +45,30 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
   const net = income - spent;
   const uncat = txns.filter((t) => t.categoryId === null).length;
 
+  // Money in: everything positive except shuffling between your own accounts (not new money)
+  const inMap = new Map<string, number>();
+  let movedIn = 0;
+  for (const t of txns) {
+    if (t.amount <= 0) continue;
+    if (t.category?.name === "Transfer") movedIn += t.amount;
+    else inMap.set(t.category?.name ?? "Uncategorised", (inMap.get(t.category?.name ?? "Uncategorised") ?? 0) + t.amount);
+  }
+  const moneyIn = [...inMap].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+
+  // Savings & investments: non-spending categories that aren't income/transfer/reimbursement (Gold, FD, Investment...).
+  // Out = put in, in = came back (FD maturity, sold stock); net = what stayed invested this month.
+  const invMap = new Map<string, { out: number; in: number }>();
+  for (const t of txns) {
+    const c = t.category;
+    if (!c || c.isSpending || LOCKED.includes(c.name)) continue;
+    const v = invMap.get(c.name) ?? { out: 0, in: 0 };
+    if (t.amount < 0) v.out -= t.amount;
+    else v.in += t.amount;
+    invMap.set(c.name, v);
+  }
+  const invest = [...invMap].map(([name, v]) => ({ name, ...v, net: v.out - v.in })).sort((a, b) => b.net - a.net);
+  const investNet = invest.reduce((s, i) => s + i.net, 0);
+
   const byCatMap = new Map<string, number>();
   for (const t of spendTx) {
     const k = t.category?.name ?? "Uncategorised";
@@ -63,7 +88,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
 
   const merch = new Map<string, { total: number; count: number }>();
   for (const t of spendTx) {
-    const k = t.description.trim().toUpperCase();
+    // same payee key as "group similar" on /transactions, so 4 UPI payments to one person are one line
+    const k = merchantKeyword(t.description) || t.description.trim().toUpperCase();
     const m = merch.get(k) ?? { total: 0, count: 0 };
     m.total -= t.amount;
     m.count++;
@@ -139,6 +165,40 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ m
         <div className="card">
           <h2 className="h2 mb-3">Cumulative spend</h2>
           <DailyArea data={daily} />
+        </div>
+      </div>
+
+      <div className="mb-6 grid gap-3 lg:grid-cols-2">
+        <div className="card">
+          <h2 className="h2 mb-3">Money in</h2>
+          {moneyIn.length ? <CategoryBar data={moneyIn} label="Received" /> : <p className="muted">Nothing came in.</p>}
+          {movedIn > 0 && <p className="hint mt-2">{inr(movedIn)} moved between your own accounts, not counted.</p>}
+        </div>
+        <div className="card">
+          <div className="mb-3 flex items-baseline justify-between gap-3">
+            <h2 className="h2">Savings &amp; investments</h2>
+            <span className={`font-medium tabular-nums ${investNet >= 0 ? "text-pos" : "text-neg"}`}>{inr(investNet)} net</span>
+          </div>
+          {invest.length === 0 ? (
+            <p className="muted">Nothing invested this month. Tag FD, gold, SIP rows with a non-spending category.</p>
+          ) : (
+            <div className="divide-rows -mx-4 text-sm">
+              <div className="hint flex gap-3 px-4 pb-2">
+                <span className="flex-1">Category</span>
+                <span className="w-20 text-right">Put in</span>
+                <span className="w-20 text-right">Came back</span>
+                <span className="w-20 text-right">Net</span>
+              </div>
+              {invest.map((i) => (
+                <div key={i.name} className="flex gap-3 px-4 py-2 tabular-nums">
+                  <span className="min-w-0 flex-1 truncate">{i.name}</span>
+                  <span className="w-20 text-right">{inr(i.out)}</span>
+                  <span className="w-20 text-right text-muted">{i.in ? inr(i.in) : "—"}</span>
+                  <span className="w-20 text-right font-medium">{inr(i.net)}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

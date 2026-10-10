@@ -20,9 +20,10 @@ export async function applyRule(keyword: string, categoryId: number, reimburseme
 export const reimbursementId = async () =>
   (await db.category.findUnique({ where: { name: "Reimbursement" }, select: { id: true } }))?.id;
 
-/** Run every rule over uncategorised rows. Rules are tried in keyword order; first one to claim a row wins. */
+/** Run every rule over uncategorised rows, longest keyword first so the most specific rule claims a row (same as categorise). */
 export async function applyAllRules() {
-  const [rules, rid] = await Promise.all([db.rule.findMany({ orderBy: { keyword: "asc" } }), reimbursementId()]);
+  const [all, rid] = await Promise.all([db.rule.findMany(), reimbursementId()]);
+  const rules = all.sort((a, b) => b.keyword.length - a.keyword.length);
   let n = 0;
   for (const r of rules) n += await applyRule(r.keyword, r.categoryId, rid);
   return n;

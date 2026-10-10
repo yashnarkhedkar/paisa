@@ -33,15 +33,15 @@ const tooltipCommon = {
   cursor: { fill: "rgba(17,17,19,0.04)" },
 };
 
-export function CategoryBar({ data }: { data: { name: string; value: number }[] }) {
+export function CategoryBar({ data, label = "Spent" }: { data: { name: string; value: number }[]; label?: string }) {
   return (
-    <div style={{ height: Math.max(220, data.length * 28) }} className="w-full">
+    <div style={{ height: Math.max(120, data.length * 32 + 32) }} className="w-full">
       <ResponsiveContainer>
         <BarChart data={data} layout="vertical" margin={{ left: 0, right: 16, top: 4, bottom: 0 }}>
           <CartesianGrid horizontal={false} vertical stroke={line} />
           <XAxis type="number" tickFormatter={fmt} tick={tick} axisLine={false} tickLine={false} />
           <YAxis type="category" dataKey="name" width={100} tick={tick} axisLine={false} tickLine={false} />
-          <Tooltip {...tooltipCommon} formatter={(v) => [fmt(v), "Spent"]} />
+          <Tooltip {...tooltipCommon} formatter={(v) => [fmt(v), label]} />
           <Bar dataKey="value" fill={ink} fillOpacity={0.85} radius={3} />
         </BarChart>
       </ResponsiveContainer>

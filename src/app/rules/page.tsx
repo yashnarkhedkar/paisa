@@ -13,7 +13,7 @@ export default async function RulesPage() {
     <div className="space-y-6">
       <div className="space-y-1">
         <h1 className="h1">Rules</h1>
-        <p className="hint">A rule matches when its keyword appears anywhere in a transaction description. First match wins. Keep keywords specific: &quot;ola cabs&quot;, not &quot;ola&quot;.</p>
+        <p className="hint">A rule matches when its keyword appears anywhere in a transaction description. If several match, the longest keyword wins. Keep keywords specific: &quot;ola cabs&quot;, not &quot;ola&quot;.</p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">

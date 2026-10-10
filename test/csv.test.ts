@@ -55,6 +55,11 @@ describe("categorise", () => {
   it("returns null otherwise", () => {
     expect(categorise("RANDOM", -10, [], fb)).toBeNull();
   });
+  it("longest matching keyword wins", () => {
+    const rules = [{ keyword: "yash san", categoryId: 15 }, { keyword: "yash santosh", categoryId: 20 }];
+    expect(categorise("FD 103 Mr. Yash Santosh N", -50000, rules, fb)).toBe(20);
+    expect(categorise("UPI/DR/1/Yash San/BARB", -500, rules, fb)).toBe(15);
+  });
   it("reimbursement rules only claim money coming in", () => {
     const rules = [{ keyword: "friend@", categoryId: 16 }];
     const withR = { ...fb, reimbursementId: 16 };
