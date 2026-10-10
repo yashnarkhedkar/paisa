@@ -6,7 +6,7 @@ const DATE = /^\d{2}\/\d{2}\/\d{4}$/;
 const AMT = /^[\d,]+\.\d\d$/;
 const N = "([\\d,]+\\.\\d\\d)";
 // Previous Balance - Payments - Credits + Purchase + Cash Advance + Other Debit&Charges = Total Payment Due
-const SUMMARY = new RegExp(`${N} (Dr|Cr) ${N} ${N} ${N} ${N} ${N} ${N} (Dr|Cr)`);
+const SUMMARY = new RegExp(`${N}(?: (Dr|Cr))? ${N} ${N} ${N} ${N} ${N} ${N} (Dr|Cr)`);
 
 const num = (s: string) => Number(s.replace(/,/g, ""));
 

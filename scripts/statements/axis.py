@@ -5,7 +5,8 @@ from datetime import datetime
 DATE = re.compile(r"\d{2}/\d{2}/\d{4}$")
 AMT = re.compile(r"[\d,]+\.\d\d$")
 # Previous Balance - Payments - Credits + Purchase + Cash Advance + Other Debit&Charges = Total Payment Due
-SUMMARY = re.compile(r"([\d,]+\.\d\d) (Dr|Cr) ([\d,]+\.\d\d) ([\d,]+\.\d\d) ([\d,]+\.\d\d) ([\d,]+\.\d\d) "
+# First statement on a new card shows previous balance "0.00" with no Dr/Cr
+SUMMARY = re.compile(r"([\d,]+\.\d\d)(?: (Dr|Cr))? ([\d,]+\.\d\d) ([\d,]+\.\d\d) ([\d,]+\.\d\d) ([\d,]+\.\d\d) "
                      r"([\d,]+\.\d\d) ([\d,]+\.\d\d) (Dr|Cr)")
 
 
